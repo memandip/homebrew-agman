@@ -1,8 +1,8 @@
 class Agman < Formula
   desc "Agent manager: switchable config profiles for AI coding agents"
   homepage "https://github.com/memandip/agman"
-  url "https://github.com/memandip/agman/archive/refs/tags/v0.3.0.tar.gz"
-  sha256 "c7ed4de936f8016d3d8ceb92347b05cc5778980e66e508ddb641f9e7b44d901c"
+  url "https://github.com/memandip/agman/archive/refs/tags/v0.4.0.tar.gz"
+  sha256 "d5f1d68b337100638f29a389e426dada885b4df8a93efe09946fd1d02abb6cba"
   license "MIT"
   head "https://github.com/memandip/agman.git", branch: "main"
 
@@ -21,7 +21,7 @@ class Agman < Formula
     assert_match "none", shell_output("#{bin}/agman current")
 
     system bin/"agman", "create", "example"
-    assert_path_exists testpath/"profiles/example/CLAUDE.md"
+    assert_path_exists testpath/"profiles/example/claude/CLAUDE.md"
     assert_match "example", shell_output("#{bin}/agman list")
   end
 end
