@@ -21,7 +21,7 @@ class Agman < Formula
     assert_match "none", shell_output("#{bin}/agman current")
 
     system bin/"agman", "create", "example"
-    assert_predicate testpath/"profiles/example/CLAUDE.md", :exist?
+    assert_path_exists testpath/"profiles/example/CLAUDE.md"
     assert_match "example", shell_output("#{bin}/agman list")
   end
 end
