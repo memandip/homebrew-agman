@@ -1,8 +1,8 @@
 class Agman < Formula
   desc "Agent manager: switchable config profiles for AI coding agents"
   homepage "https://github.com/memandip/agman"
-  url "https://github.com/memandip/agman/archive/refs/tags/v0.4.0.tar.gz"
-  sha256 "d5f1d68b337100638f29a389e426dada885b4df8a93efe09946fd1d02abb6cba"
+  url "https://github.com/memandip/agman/archive/refs/tags/v0.5.0.tar.gz"
+  sha256 "3eab0447b856f562251aaec5b9fe04a5fad632d01e7a6c82e4b2d6efc7942dd7"
   license "MIT"
   head "https://github.com/memandip/agman.git", branch: "main"
 
