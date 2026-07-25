@@ -9,7 +9,17 @@ config profiles for AI coding agents (Claude Code, Codex CLI, Gemini CLI).
 brew install memandip/agman/agman
 ```
 
-Or `brew tap memandip/agman` and then `brew install agman`.
+That first install also trusts the tap, so the short name works from then on:
+`brew install agman`, `brew upgrade agman`.
+
+To use the short name from the start, trust the tap explicitly first. Current Homebrew will
+not resolve a bare formula name from an untrusted third-party tap:
+
+```bash
+brew tap memandip/agman
+brew trust memandip/agman
+brew install agman
+```
 
 Or, in a `brew bundle` `Brewfile`:
 
