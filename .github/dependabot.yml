@@ -1,3 +1,6 @@
+# Keeps the action SHAs pinned in .github/workflows/tests.yml current. That
+# workflow comes from `brew tap-new` and pins Homebrew's actions by commit, so
+# without this they would silently go stale.
 version: 2
 updates:
   - package-ecosystem: github-actions
