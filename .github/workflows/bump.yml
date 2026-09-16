@@ -1,0 +1,152 @@
+name: Bump formula to the latest agman release
+
+# Keeps Formula/agman.rb in step with memandip/agman releases without a human
+# in the loop. Runs when the main repository's release pipeline dispatches it
+# (homebrew.yml there, the fast path) and hourly as a fallback, so a bump is
+# late by at most an hour when the cross-repository token over there is
+# missing or under-scoped. Everything happens under this repository's own
+# GITHUB_TOKEN. The bumped formula is installed and its `test do` block run
+# on the runner before anything is pushed; a broken formula never reaches
+# main. A push made with GITHUB_TOKEN does not start tests.yml, which is why
+# the checks run here.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "agman tag to bump to, e.g. v0.16.0 (default: the latest release)"
+        required: false
+      dry_run:
+        description: "Rewrite, install and test the formula, but do not push"
+        type: boolean
+        default: false
+  schedule:
+    - cron: "23 * * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bump-formula
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    name: Bump agman
+    runs-on: ubuntu-latest
+    steps:
+      # Checks this tap out at the tap path, trusts it, and configures git
+      # credentials for the push. No actions/checkout: setup-homebrew owns the
+      # workspace for tap repositories.
+      - name: Set up Homebrew and this tap
+        id: brew
+        uses: Homebrew/actions/setup-homebrew@df4b09108a1de9d6f995fe68f302b3f68bd6d2ef # 2026.07.20.1
+        with:
+          token: ${{ github.token }}
+
+      - name: Resolve the release to bump to
+        id: target
+        working-directory: ${{ steps.brew.outputs.repository-path }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          set -euo pipefail
+          # Bump the live formula whatever ref this run was started from, so a
+          # manual run from a branch cannot push stale content over main.
+          git fetch -q origin main
+          git checkout -q --force -B main origin/main
+
+          tag="${INPUT_TAG:-}"
+          if [ -z "$tag" ]; then
+            # Latest published release; drafts and pre-releases excluded.
+            tag="$(gh release view -R memandip/agman --json tagName --jq .tagName)"
+          fi
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::notice::$tag is not a stable vX.Y.Z tag; the formula tracks stable releases only."
+            echo "bump=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          version="${tag#v}"
+          current="$(sed -n 's|^  url ".*/archive/refs/tags/v\(.*\)\.tar\.gz"$|\1|p' Formula/agman.rb)"
+          if [ -z "$current" ]; then
+            echo "::error::could not read the current version from Formula/agman.rb"
+            exit 1
+          fi
+          if [ "$current" = "$version" ]; then
+            echo "::notice::Formula/agman.rb is already at $version; nothing to do."
+            echo "bump=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          newest="$(printf '%s\n%s\n' "$current" "$version" | sort -V | tail -n1)"
+          if [ "$newest" != "$version" ]; then
+            echo "::notice::Formula/agman.rb is at $current, newer than $version; not downgrading."
+            echo "bump=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "::notice::bumping Formula/agman.rb from $current to $version"
+          {
+            echo "bump=true"
+            echo "tag=$tag"
+            echo "version=$version"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Rewrite the formula
+        if: steps.target.outputs.bump == 'true'
+        working-directory: ${{ steps.brew.outputs.repository-path }}
+        env:
+          TAG: ${{ steps.target.outputs.tag }}
+          VERSION: ${{ steps.target.outputs.version }}
+        run: |
+          set -euo pipefail
+          url="https://github.com/memandip/agman/archive/refs/tags/$TAG.tar.gz"
+          curl -fsSL --retry 3 -o /tmp/agman.tar.gz "$url"
+          sha="$(sha256sum /tmp/agman.tar.gz | cut -d' ' -f1)"
+          rm -f /tmp/agman.tar.gz
+          sed -i \
+            -e "s|^  url \".*\"$|  url \"$url\"|" \
+            -e "s|^  sha256 \".*\"$|  sha256 \"$sha\"|" Formula/agman.rb
+          grep -q "\"$url\"" Formula/agman.rb
+          grep -q "\"$sha\"" Formula/agman.rb
+          git diff --stat
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -qam "agman $VERSION" -m "Bumped to memandip/agman $TAG by bump.yml."
+
+      - name: Install and test the bumped formula
+        if: steps.target.outputs.bump == 'true'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: |
+          set -euo pipefail
+          # memandip/homebrew-agman is the tap memandip/agman.
+          TAP="$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]' | sed 's|/homebrew-|/|')"
+          # setup-homebrew trusts the tap already; repeated for older pins.
+          brew trust "$TAP" >/dev/null 2>&1 || true
+          brew install --build-from-source "$TAP/agman"
+          brew test "$TAP/agman"
+          brew audit --strict "$TAP/agman"
+          brew style "$TAP"
+          "$(brew --prefix)/bin/agman" version
+
+      - name: Push to main
+        if: steps.target.outputs.bump == 'true' && github.event.inputs.dry_run != 'true'
+        working-directory: ${{ steps.brew.outputs.repository-path }}
+        env:
+          VERSION: ${{ steps.target.outputs.version }}
+        run: |
+          set -euo pipefail
+          git push origin HEAD:main
+          echo "::notice::published Formula/agman.rb at $VERSION to main"
+
+      - name: Dry run summary
+        if: steps.target.outputs.bump == 'true' && github.event.inputs.dry_run == 'true'
+        working-directory: ${{ steps.brew.outputs.repository-path }}
+        run: |
+          {
+            echo "## Dry run: nothing was pushed"
+            echo
+            echo '```diff'
+            git show --format= HEAD
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

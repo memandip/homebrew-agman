@@ -62,9 +62,12 @@ brew install --build-from-source memandip/agman/agman
 brew test agman
 ```
 
-Version bumps are normally opened automatically by the
-[release workflow](https://github.com/memandip/agman/blob/main/.github/workflows/homebrew.yml)
-in the main repository when a new agman release is published.
+Version bumps need no pull request: [`bump.yml`](.github/workflows/bump.yml) rewrites the
+formula for the latest agman release, taps this checkout, runs `brew install`, `brew test` and
+`brew audit --strict` on the runner, and pushes to `main` only if all of that passes. It is
+dispatched by the [release workflow](https://github.com/memandip/agman/blob/main/.github/workflows/homebrew.yml)
+in the main repository and also runs hourly, so the formula follows a release within the hour
+even if that dispatch fails.
 
 ## Documentation
 
